@@ -30,8 +30,6 @@ def create_review_agent(name: str, files: list[dict], emit, model_name: str | No
             system_prompt = SYSTEM_PROMPT.format(review_requirements=AGENTS[name], name=name)
             user_input = json.dumps({"review_focus": state["focus"], "source_files": state["context"]})
 
-            print(f">>>>>\n{system_prompt}\n<<<<<\n")
-
             # invoke model  
             result = await model.ainvoke([
                 ("system", system_prompt),
