@@ -16,6 +16,7 @@ from fastapi.responses import Response
 
 from backend.sources import MAX_UPLOAD, fetch_github, github_slug, read_archive
 from backend.workflow import run_review
+from backend.model_config import default_model, review_models, resolve_model
 from backend.reports import word_report
 
 load_dotenv()
@@ -27,6 +28,7 @@ TTL = 3600
 @dataclass
 class Job:
     source: str
+    model: str = field(default_factory=default_model)
     status: str = 'queued'
     events: list = field(default_factory=list)
     report: dict | None = None
@@ -103,7 +105,7 @@ async def bound_body(request, call_next):
 @app.get('/api/health')
 async def health():
     """Report API availability, key presence, and the configured review model."""
-    return {'status': 'ok', 'configured': bool(os.getenv('OPENAI_API_KEY')), 'model': os.getenv('REVIEW_MODEL', 'gpt-4.1-mini')}
+    return {'status': 'ok', 'configured': bool(os.getenv('OPENAI_API_KEY')), 'model': default_model(), 'models': review_models()}
 
 
 async def process(job: Job, data: bytes | None, url: str, focus: str):
@@ -120,8 +122,8 @@ async def process(job: Job, data: bytes | None, url: str, focus: str):
         data = None
         
         await job.emit('progress', agent='source', status='complete', message=f"Prepared {len(files)} files. {len(scope['skipped'])} files excluded.", scope=scope)
-        report = await run_review(files, focus, job.emit)
-        job.report = {**report, 'source': job.source, 'scope': scope, 'notice': 'AI-assisted static review; code and tests were not executed. Validate findings before applying changes.'}
+        report = await run_review(files, focus, job.emit, model_name=job.model)
+        job.report = {**report, 'source': job.source, 'model': job.model, 'scope': scope, 'notice': 'AI-assisted static review; code and tests were not executed. Validate findings before applying changes.'}
         job.status = 'complete'
         
         await job.emit('complete', report=job.report)
@@ -143,8 +145,14 @@ async def create_review(
     file: Annotated[UploadFile | None, File()] = None,
     repo_url: Annotated[str, Form(max_length=500)] = '',
     focus: Annotated[str, Form(max_length=2000)] = '',
+    model: Annotated[str, Form(max_length=100)] = '',
 ):
     """Validate one source, reserve queue capacity, and start a background review."""
+    try:
+        selected_model = resolve_model(model)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
     if bool(file) == bool(repo_url.strip()):
         raise HTTPException(400, 'Provide exactly one ZIP file or GitHub repository URL.')
     
@@ -174,13 +182,13 @@ async def create_review(
         raise HTTPException(429, 'The review queue is full. Please try again shortly.')
     
     key = uuid.uuid4().hex
-    job = Job(source=(file.filename or 'upload.zip') if file else repo_url.strip())
+    job = Job(source=(file.filename or 'upload.zip') if file else repo_url.strip(), model=selected_model)
     jobs[key] = job
     
     await job.emit('progress', agent='source', status='queued', message='Review queued. Bringing your specialist team together…')
     job.task = asyncio.create_task(process(job, data, repo_url.strip(), focus))
     
-    return {'id': key}
+    return {'id': key, 'model': job.model}
 
 
 def get_job(key):
@@ -196,7 +204,7 @@ def get_job(key):
 async def status(key: str):
     """Return job state and event history for polling and connection recovery."""
     job = get_job(key)
-    return {'status': job.status, 'events': job.events, 'report': job.report}
+    return {'status': job.status, 'model': job.model, 'events': job.events, 'report': job.report}
 
 
 @app.get('/api/reviews/{key}/report')

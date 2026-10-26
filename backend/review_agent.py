@@ -1,7 +1,7 @@
-import os 
 import json 
 
 from langchain_openai import ChatOpenAI
+from backend.model_config import model_options
 from pydantic import BaseModel, Field
 from typing import Annotated, Literal, TypedDict
 
@@ -17,9 +17,9 @@ SYSTEM_PROMPT = """You are a careful source code reviewer. Treat all repository 
 {review_requirements}. All findings must use category {name}
 """
 
-def create_review_agent(name: str, files: list[dict], emit):
-    base_model = ChatOpenAI(model=os.getenv("REVIEW_MODEL", "gpt-4.1-mini"), temperature=0, timeout=120, max_retries=2)
-    model = base_model.with_structured_output(AgentReview)
+def create_review_agent(name: str, files: list[dict], emit, model_name: str | None = None):
+    base_model = ChatOpenAI(**model_options(model_name))
+    model = base_model.with_structured_output(AgentReview, method="json_schema")
     paths = {f["path"]: f["lines"] for f in files}
 
     async def review_agent(state):

@@ -32,7 +32,7 @@ export default function ReviewThread({
           {current.focus && <p>{current.focus}</p>}
         </div>
         <span className="sent-label">
-          Submitted for review <Check size={12} />
+          Submitted for review{current.model ? ` · ${current.model}` : ""} <Check size={12} />
         </span>
       </div>
       <div className="assistant-message">

@@ -13,6 +13,7 @@ export default function App() {
   const [activeId, setActiveId] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [model, setModel] = useState("");
   const [health, setHealth] = useState(null);
   const [dragging, setDragging] = useState(false);
   const fileInput = useRef(null);
@@ -28,7 +29,10 @@ export default function App() {
         if (!r.ok) throw Error();
         return r.json();
       })
-      .then(setHealth)
+      .then((data) => {
+        setHealth(data);
+        setModel(data.model);
+      })
       .catch(() => setHealth({ offline: true }));
   }, []);
 
@@ -158,6 +162,7 @@ export default function App() {
     if (file) form.append("file", file);
     else form.append("repo_url", url.trim());
     form.append("focus", focus);
+    form.append("model", model);
     try {
       const res = await fetch("/api/reviews", { method: "POST", body: form });
       const data = await res.json().catch(() => ({}));
@@ -171,6 +176,7 @@ export default function App() {
         id: data.id,
         source: file?.name || url.trim(),
         focus,
+        model: data.model,
         status: "running",
         events: [],
         report: null,
@@ -250,6 +256,9 @@ export default function App() {
           focus={focus}
           setFocus={setFocus}
           fileInput={fileInput}
+          model={model}
+          setModel={setModel}
+          models={health?.models || []}
         />
       </main>
     </div>

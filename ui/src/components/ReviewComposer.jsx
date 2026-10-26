@@ -20,6 +20,9 @@ export default function ReviewComposer({
   focus,
   setFocus,
   fileInput,
+  model,
+  setModel,
+  models,
 }) {
   return (
     <div className="composer-area">
@@ -108,18 +111,33 @@ export default function ReviewComposer({
               <span /> 3 agents · 1 review
             </span>
           </div>
-          <button
-            className="send"
-            type="submit"
-            aria-label="Start code review"
-            disabled={busy || (!file && !url.trim())}
-          >
-            {submitting ? (
-              <LoaderCircle size={19} className="spin" />
-            ) : (
-              <ArrowUp size={21} />
-            )}
-          </button>
+          <div className="composer-submit-controls">
+            <label className="model-selector">
+              GPT model
+              <select
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                disabled={busy || !models.length}
+              >
+                {!models.length && <option value="">Server default</option>}
+                {models.map((name) => (
+                  <option key={name} value={name}>{name}</option>
+                ))}
+              </select>
+            </label>
+            <button
+              className="send"
+              type="submit"
+              aria-label="Start code review"
+              disabled={busy || (!file && !url.trim())}
+            >
+              {submitting ? (
+                <LoaderCircle size={19} className="spin" />
+              ) : (
+                <ArrowUp size={21} />
+              )}
+            </button>
+          </div>
         </div>
       </form>
       <input

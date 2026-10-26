@@ -29,12 +29,12 @@ Open **http://localhost:5173**. Vite proxies `/api` and `/ws` to the backend. AP
 
 Port 5173 must be available. If you change the UI port in `ui/vite.config.js`, also update `ALLOWED_ORIGINS` in `.env` and restart the backend.
 
-Set `REVIEW_MODEL` in `.env` to change the default `gpt-4.1-mini`. The selected model must support structured output. Keep the key in the backend; no credentials are bundled into the UI. `ALLOWED_ORIGINS` is a comma-separated allowlist for HTTP and WebSocket browser origins.
+Set `REVIEW_MODEL` in `.env` to change the default `gpt-4.1-mini`. The UI model selector offers GPT-6 Astra, GPT-6.1 Sol, GPT-6 Luna/Sol, GPT-5.6 Sol/Terra/Luna, GPT-5.5, GPT-5.4 (including mini/nano), GPT-5.2/5.1/5 (including mini/nano), GPT-4.1/4o (including mini), and the configured default. The catalog is maintained in `backend/model_config.py` (checked against the [OpenAI catalog](https://developers.openai.com/api/docs/models/all) on October 26, 2026); it is not an account-specific availability check. Newer reasoning models omit temperature; all agents use JSON-schema structured output. The choice applies to all specialists and the orchestrator for that review. The selected model must support structured output and be available to your API key. Keep the key in the backend; no credentials are bundled into the UI. `ALLOWED_ORIGINS` is a comma-separated allowlist for HTTP and WebSocket browser origins.
 
 ## Use it
 
 1. Attach or drag in a `.zip` (up to 20 MB), or paste `https://github.com/owner/repository`. GitHub input reviews the default branch; private repositories and branch URLs are unsupported.
-2. Optionally describe an area to focus on, then press the send arrow.
+2. Choose a GPT model, optionally describe an area to focus on, then press the send arrow.
 3. Watch specialist status and progress messages arrive over WebSocket. Interrupted connections automatically reconnect and replay missed events, with REST recovery.
 4. Read findings by severity, expand suggested fixes, inspect the review scope, and download a Word document or JSON.
 
@@ -70,8 +70,8 @@ The fan-out/fan-in follows the [LangGraph workflow pattern](https://docs.langcha
 
 ## API
 
-- `GET /api/health` — service status, model, and whether a key is configured (does not validate the key).
-- `POST /api/reviews` — multipart form: exactly one `file` or `repo_url`, plus optional `focus`; returns `{ "id": "..." }` with HTTP 202.
+- `GET /api/health` — service status, default `model`, selectable `models`, and whether a key is configured (does not validate the key).
+- `POST /api/reviews` — multipart form: exactly one `file` or `repo_url`, plus optional `focus` and `model` (defaults to `REVIEW_MODEL`); returns `{ "id": "...", "model": "..." }` with HTTP 202.
 - `WS /ws/reviews/{id}?after=-1` — replayable `progress`, `complete`, and `error` events with monotonically increasing IDs; periodic heartbeats. Browser origin must be allowed.
 - `GET /api/reviews/{id}` — status, event history, and completed report.
 - `GET /api/reviews/{id}/report?format=docx` — download a Word document; use `format=json` for structured output or `format=markdown` for Markdown (the API default).

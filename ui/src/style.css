@@ -529,8 +529,35 @@ h1 > span {
 .composer > .focus-input::placeholder {
   color: #b0b9c7;
 }
+.model-selector {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  min-width: 0;
+  white-space: nowrap;
+  color: #68768c;
+  font-size: 12px;
+}
+.model-selector select {
+  min-width: 0;
+  max-width: 190px;
+  width: 100%;
+  padding: 6px 10px;
+  border: 1px solid #e7ebf2;
+  border-radius: 7px;
+  background: white;
+  color: #344563;
+  font: inherit;
+}
+.model-selector select:focus-visible {
+  outline: 2px solid #6483e5;
+  outline-offset: 2px;
+}
 .composer-toolbar {
   display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
 }
@@ -538,6 +565,14 @@ h1 > span {
   display: flex;
   align-items: center;
   gap: 12px;
+}
+.composer-submit-controls {
+  margin-left: auto;
+  min-width: 0;
+  max-width: 100%;
+}
+.composer-submit-controls .send {
+  flex-shrink: 0;
 }
 .attach {
   display: grid;

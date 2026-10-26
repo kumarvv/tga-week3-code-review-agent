@@ -8,7 +8,9 @@ import pytest
 from docx import Document
 from fastapi.testclient import TestClient
 
-from backend import main, workflow
+from backend import main, workflow, review_agent, orchestrator_agent
+from backend.models import AgentReview, Finding
+from backend.model_config import REVIEW_MODELS, model_options
 from backend.sources import MAX_FILE, github_slug, read_archive
 
 
@@ -57,7 +59,7 @@ class FakeModel:
         self.fail = fail
         self.all_started = asyncio.Event()
 
-    def with_structured_output(self, schema):
+    def with_structured_output(self, schema, **kwargs):
         return self
 
     async def ainvoke(self, messages):
@@ -67,8 +69,8 @@ class FakeModel:
             if self.fail == 'orchestrator':
                 raise RuntimeError('provider error')
             reviews = json.loads(messages[1][1])
-            return workflow.AgentReview(summary='Combined review', findings=[f for r in reviews for f in r['findings']])
-        name = next(name for name in workflow.AGENTS if f'category {name}.' in system)
+            return AgentReview(summary='Combined review', findings=[f for r in reviews for f in r['findings']])
+        name = next(name for name in workflow.AGENTS if f'category {name}' in system)
         self.started.add(name)
         if len(self.started) == 3:
             self.all_started.set()
@@ -76,14 +78,14 @@ class FakeModel:
         await asyncio.wait_for(self.all_started.wait(), timeout=2)
         if self.fail in {name, 'all'}:
             raise RuntimeError('provider error')
-        return workflow.AgentReview(summary=f'{name} reviewed', findings=[workflow.Finding(title=f'{name} issue', severity='high', category=name, file='app.py', line=1, explanation='Evidence', recommendation='Fix it')])
+        return AgentReview(summary=f'{name} reviewed', findings=[Finding(title=f'{name} issue', severity='high', category=name, file='app.py', line=1, explanation='Evidence', recommendation='Fix it')])
 
 
 @pytest.mark.parametrize('failure', [None, 'security', 'orchestrator'])
 def test_parallel_workflow_and_failure_reporting(monkeypatch, failure):
     async def run():
         fake = FakeModel(failure)
-        monkeypatch.setattr(workflow, 'make_model', lambda: fake)
+        patch_models(monkeypatch, fake)
         events = []
         async def emit(kind, **data):
             events.append((kind, data))
@@ -95,11 +97,13 @@ def test_parallel_workflow_and_failure_reporting(monkeypatch, failure):
     asyncio.run(run())
 
 
-def test_rest_websocket_replay_and_download(monkeypatch):
+@pytest.mark.parametrize('selected_model', [None, *REVIEW_MODELS])
+def test_rest_websocket_replay_and_download(monkeypatch, selected_model):
     monkeypatch.setenv('OPENAI_API_KEY', 'test-only')
-    monkeypatch.setattr(workflow, 'make_model', lambda: FakeModel())
+    monkeypatch.setenv('REVIEW_MODEL', 'gpt-4.1-mini')
+    calls = patch_models(monkeypatch, FakeModel())
     with TestClient(main.app) as client:
-        response = client.post('/api/reviews', files={'file': ('source.zip', archive({'app.py': 'pass'}), 'application/zip')}, data={'focus': 'Review thoroughly'})
+        response = client.post('/api/reviews', files={'file': ('source.zip', archive({'app.py': 'pass'}), 'application/zip')}, data={'focus': 'Review thoroughly', **({'model': selected_model} if selected_model else {})})
         assert response.status_code == 202, response.text
         key = response.json()['id']
         events = []
@@ -111,6 +115,10 @@ def test_rest_websocket_replay_and_download(monkeypatch):
                     break
         assert events[-1]['type'] == 'complete', events
         assert len(events[-1]['report']['findings']) == 3
+        expected_model = selected_model or 'gpt-4.1-mini'
+        assert response.json()['model'] == expected_model
+        assert events[-1]['report']['model'] == expected_model
+        assert [call['model'] for call in calls] == [expected_model] * 4
         with client.websocket_connect(f'/ws/reviews/{key}?after={events[-2]["id"]}', headers={'origin': 'http://localhost:5173'}) as socket:
             assert socket.receive_json()['type'] == 'complete'
         assert client.get(f'/api/reviews/{key}').json()['status'] == 'complete'
@@ -156,7 +164,7 @@ def test_missing_key(monkeypatch):
 
 def test_all_agents_fail(monkeypatch):
     async def run():
-        monkeypatch.setattr(workflow, 'make_model', lambda: FakeModel('all'))
+        patch_models(monkeypatch, FakeModel('all'))
         async def emit(*args, **kwargs):
             pass
         with pytest.raises(RuntimeError, match='All review agents failed'):
@@ -183,3 +191,45 @@ def test_github_download(monkeypatch):
     data, name = asyncio.run(sources.fetch_github('https://github.com/user/repo'))
     assert name == 'user/repo'
     assert read_archive(data)[0][0]['path'] == 'repo-main/app.py'
+
+
+def patch_models(monkeypatch, fake):
+    calls = []
+
+    def create(**kwargs):
+        calls.append(kwargs)
+        return fake
+
+    monkeypatch.setattr(review_agent, 'ChatOpenAI', create)
+    monkeypatch.setattr(orchestrator_agent, 'ChatOpenAI', create)
+    return calls
+
+
+def test_model_options_and_invalid_selection(monkeypatch):
+    monkeypatch.setenv('REVIEW_MODEL', 'gpt-4.1-2025-04-14')
+    monkeypatch.setenv('OPENAI_API_KEY', 'test-only')
+    with TestClient(main.app) as client:
+        health = client.get('/api/health').json()
+        assert health['model'] == 'gpt-4.1-2025-04-14'
+        assert health['model'] in health['models']
+        assert 'gpt-4.1-mini' in health['models']
+        response = client.post('/api/reviews', data={
+            'repo_url': 'https://github.com/a/b', 'model': 'invalid-model',
+        })
+        assert response.status_code == 400
+        assert 'Unsupported review model' in response.json()['detail']
+        assert not main.jobs
+
+
+@pytest.mark.parametrize('model_name', REVIEW_MODELS)
+def test_model_request_parameters(model_name):
+    from langchain_openai import ChatOpenAI
+    from langchain_core.messages import HumanMessage
+
+    model = ChatOpenAI(**model_options(model_name), api_key='test-only')
+    payload = model._get_request_payload([HumanMessage(content='Review this code')])
+    assert payload['model'] == model_name
+    if model_name.startswith(('gpt-5', 'gpt-6')):
+        assert 'temperature' not in payload
+    else:
+        assert payload['temperature'] == 0
