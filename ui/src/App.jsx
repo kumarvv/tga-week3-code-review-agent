@@ -364,11 +364,11 @@ export default function App() {
   return (
     <div className="app-shell">
       <aside className="sidebar">
-        <a className="brand" href="/" aria-label="Patchwork home">
+        <a className="brand" href="/" aria-label="CodeScanner home">
           <span className="brand-mark">
             <Layers3 size={22} />
           </span>
-          patchwork<span className="brand-dot">.</span>
+          CodeScanner<span className="brand-dot">.</span>
         </a>
         <button
           className="new-review"
@@ -494,7 +494,7 @@ export default function App() {
                 </div>
                 <div>
                   <div className="message-label">
-                    Patchwork <span>Review orchestrator</span>
+                    CodeScanner <span>Review orchestrator</span>
                   </div>
                   <div className="bubble">
                     Hey there! 👋 Ready when you are. Drop in a ZIP file or
@@ -549,7 +549,7 @@ export default function App() {
                 </div>
                 <div className="assistant-content">
                   <div className="message-label">
-                    Patchwork <span>Review orchestrator</span>
+                    CodeScanner <span>Review orchestrator</span>
                   </div>
                   <div className="bubble">
                     I’ve got your code. The team is checking for bugs, security

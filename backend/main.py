@@ -61,7 +61,7 @@ async def lifespan(app):
     jobs.clear()
 
 
-app = FastAPI(title='Patchwork Code Review', lifespan=lifespan)
+app = FastAPI(title='CodeScanner', lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origins=ORIGINS, allow_methods=['GET', 'POST'], allow_headers=['Content-Type'])
 
 

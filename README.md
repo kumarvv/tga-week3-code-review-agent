@@ -1,4 +1,4 @@
-# Patchwork · AI code review
+# CodeScanner · AI code review
 
 A chat-style code reviewer built with **React, Tailwind CSS, Vite, FastAPI, LangChain, and LangGraph**. Upload a ZIP or enter a public GitHub repository URL. Three specialist agents review bugs/anti-patterns, security, and missing tests in parallel; an orchestrator merges and prioritizes their findings.
 
