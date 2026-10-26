@@ -65,9 +65,9 @@ function Report({ report, id }) {
         </div>
         <a
           className="download"
-          href={`/api/reviews/${id}/report`}
-          title="Download Markdown report"
-          aria-label="Download Markdown report"
+          href={`/api/reviews/${id}/report?format=docx`}
+          title="Download Word document report"
+          aria-label="Download Word document report"
         >
           <Download size={18} />
         </a>
@@ -602,10 +602,20 @@ export default function App() {
                       </div>
                     ))}
                     <div className="progress-note" role="status">
-                      {latest?.message ||
-                        (current.report
-                          ? "Report assembled and prioritized."
-                          : "Connecting to your review…")}
+                      {states.orchestrator === "running" &&
+                        current.status === "running" && (
+                          <LoaderCircle
+                            className="spin"
+                            size={14}
+                            aria-hidden="true"
+                          />
+                        )}
+                      <span>
+                        {latest?.message ||
+                          (current.report
+                            ? "Report assembled and prioritized."
+                            : "Connecting to your review…")}
+                      </span>
                     </div>
                     <details className="activity">
                       <summary>View activity</summary>

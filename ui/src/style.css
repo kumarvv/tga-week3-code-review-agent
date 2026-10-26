@@ -708,12 +708,18 @@ h1 > span {
   background: #c8d0dd;
 }
 .progress-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   margin-top: 11px;
   padding-top: 12px;
   border-top: 1px solid #edf0f6;
   font-size: 11px;
   color: #92a0b4;
   line-height: 1.7;
+}
+.progress-note .spin {
+  flex-shrink: 0;
 }
 .activity {
   font-size: 10px;

@@ -5,6 +5,7 @@ import stat
 import zipfile
 
 import pytest
+from docx import Document
 from fastapi.testclient import TestClient
 
 from backend import main, workflow
@@ -116,6 +117,18 @@ def test_rest_websocket_replay_and_download(monkeypatch):
         markdown = client.get(f'/api/reviews/{key}/report')
         assert 'attachment' in markdown.headers['content-disposition']
         assert 'app.py:1' in markdown.text
+        word = client.get(f'/api/reviews/{key}/report?format=docx')
+        assert word.status_code == 200
+        assert word.headers['content-type'] == 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        assert 'filename="review.docx"' in word.headers['content-disposition']
+        document = Document(io.BytesIO(word.content))
+        text = '\n'.join(paragraph.text for paragraph in document.paragraphs)
+        assert 'CodeScanner code review report' in text
+        assert 'app.py:1' in text
+        assert events[-1]['report']['summary'] in text
+        for finding in events[-1]['report']['findings']:
+            assert finding['explanation'] in text
+            assert finding['recommendation'] in text
         assert client.get(f'/api/reviews/{key}/report?format=json').json()['source'] == 'source.zip'
         assert client.get('/api/reviews/not-found').status_code == 404
 

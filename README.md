@@ -36,7 +36,7 @@ Set `REVIEW_MODEL` in `.env` to change the default `gpt-4.1-mini`. The selected 
 1. Attach or drag in a `.zip` (up to 20 MB), or paste `https://github.com/owner/repository`. GitHub input reviews the default branch; private repositories and branch URLs are unsupported.
 2. Optionally describe an area to focus on, then press the send arrow.
 3. Watch specialist status and progress messages arrive over WebSocket. Interrupted connections automatically reconnect and replay missed events, with REST recovery.
-4. Read findings by severity, expand suggested fixes, inspect the review scope, and download Markdown or JSON.
+4. Read findings by severity, expand suggested fixes, inspect the review scope, and download a Word document or JSON.
 
 The interface keeps review history for the current browser session. Reloading clears that UI history. Server reports remain available by their review ID for one hour after completion, unless the server restarts. If an agent fails, the report is explicitly marked partial; if all three fail, the review fails. If synthesis fails, the specialist findings are combined and sorted automatically.
 
@@ -74,7 +74,7 @@ The fan-out/fan-in follows the [LangGraph workflow pattern](https://docs.langcha
 - `POST /api/reviews` — multipart form: exactly one `file` or `repo_url`, plus optional `focus`; returns `{ "id": "..." }` with HTTP 202.
 - `WS /ws/reviews/{id}?after=-1` — replayable `progress`, `complete`, and `error` events with monotonically increasing IDs; periodic heartbeats. Browser origin must be allowed.
 - `GET /api/reviews/{id}` — status, event history, and completed report.
-- `GET /api/reviews/{id}/report?format=markdown` — download Markdown; use `format=json` for structured output.
+- `GET /api/reviews/{id}/report?format=docx` — download a Word document; use `format=json` for structured output or `format=markdown` for Markdown (the API default).
 
 ## Review scope and deployment
 

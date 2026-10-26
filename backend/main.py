@@ -16,6 +16,7 @@ from fastapi.responses import Response
 
 from backend.sources import MAX_UPLOAD, fetch_github, github_slug, read_archive
 from backend.workflow import run_review
+from backend.reports import word_report
 
 load_dotenv()
 logger = logging.getLogger(__name__)
@@ -174,8 +175,10 @@ async def download(key: str, format: str = 'markdown'):
     report = job.report
     if format == 'json':
         return Response(json.dumps(report, indent=2), media_type='application/json', headers={'Content-Disposition': 'attachment; filename="review.json"'})
+    if format == 'docx':
+        return Response(word_report(report), media_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document', headers={'Content-Disposition': 'attachment; filename="review.docx"'})
     if format != 'markdown':
-        raise HTTPException(400, 'Format must be markdown or json.')
+        raise HTTPException(400, 'Format must be docx, markdown or json.')
     lines = ['# Code review', '', f"Source: {report['source']}", '', report['summary'], '', report['notice'], '', f"Reviewed {report['scope']['files_reviewed']} files; excluded {len(report['scope']['skipped'])}."]
     if report['incomplete']:
         lines += ['', '**Partial review: at least one specialist failed.**']
