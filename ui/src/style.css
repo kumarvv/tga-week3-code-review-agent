@@ -943,6 +943,21 @@ h1 > span {
   margin-top: 6px;
   font-weight: 400;
 }
+.finding-file-link {
+  color: #526fc4;
+  overflow-wrap: anywhere;
+}
+.finding-file-link svg {
+  display: inline;
+  vertical-align: middle;
+}
+.finding-file-link:hover {
+  text-decoration: underline;
+}
+.finding-file-link:focus-visible {
+  outline: 2px solid #6483e5;
+  outline-offset: 3px;
+}
 .finding summary > svg {
   color: #9ba8bd;
   margin-top: 4px;

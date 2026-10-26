@@ -1,7 +1,21 @@
 import { useState } from "react";
 import { ArrowUpRight, Check, ChevronDown, Download } from "lucide-react";
 
-export default function Report({ report, id }) {
+function githubFileUrl(source, file, line) {
+  const match = source?.match(
+    /^https:\/\/github\.com\/([A-Za-z0-9][A-Za-z0-9-]*)\/([A-Za-z0-9_.-]+)\/?$/,
+  );
+  if (!match) return null;
+  const repo = match[2].replace(/\.git$/, "");
+  if (!repo || repo === "." || repo === "..") return null;
+  // GitHub ZIP downloads wrap all files in a repository root directory.
+  const parts = file.split("/").slice(1);
+  if (!parts.length || parts.some((part) => !part || part === "." || part === "..")) return null;
+  const path = parts.map(encodeURIComponent).join("/");
+  return `https://github.com/${match[1]}/${repo}/blob/HEAD/${path}#L${line}`;
+}
+
+export default function Report({ report, id, source }) {
   const [filter, setFilter] = useState("all");
   const findings = report.findings.filter(
     (f) => filter === "all" || f.severity === filter,
@@ -56,7 +70,9 @@ export default function Report({ report, id }) {
       </div>
       <div className="findings">
         {findings.length ? (
-          findings.map((f, i) => (
+          findings.map((f, i) => {
+            const fileUrl = githubFileUrl(source, f.file, f.line);
+            return (
             <details
               className="finding"
               key={`${f.file}:${f.line}:${i}`}
@@ -67,7 +83,21 @@ export default function Report({ report, id }) {
                 <span className="finding-title">
                   {f.title}
                   <small>
-                    {f.file}:{f.line}
+                    {fileUrl ? (
+                      <a
+                        className="finding-file-link"
+                        href={fileUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title="Open file on GitHub in a new tab"
+                        aria-label={`Open ${f.file}, line ${f.line}, on GitHub in a new tab`}
+                        onClick={(event) => event.stopPropagation()}
+                      >
+                        {f.file}:{f.line} <ArrowUpRight size={13} aria-hidden="true" />
+                      </a>
+                    ) : (
+                      <>{f.file}:{f.line}</>
+                    )}
                   </small>
                 </span>
                 <span className="category">{f.category}</span>
@@ -79,7 +109,8 @@ export default function Report({ report, id }) {
                 <p>{f.recommendation}</p>
               </div>
             </details>
-          ))
+            );
+          })
         ) : (
           <p className="empty-findings">
             {report.findings.length

@@ -62,7 +62,7 @@ export default function ReviewThread({
               </button>
             </div>
           )}
-          {current.report && <Report report={current.report} id={current.id} />}
+          {current.report && <Report report={current.report} id={current.id} source={current.source} />}
         </div>
       </div>
     </div>
