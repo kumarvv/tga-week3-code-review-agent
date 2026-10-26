@@ -15,6 +15,8 @@ uv sync
 uv run uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
+For IDE debugging in VS Code, open the repository root, select **Backend: FastAPI** in **Run and Debug**, and press **F5**. This uses the project's `.venv` and launches Uvicorn from the repository root so `backend` imports resolve. Running `backend/main.py` directly with **Run Python File** does not start the FastAPI server and can cause `ModuleNotFoundError`.
+
 **2. Frontend** — in a second terminal:
 
 ```sh
