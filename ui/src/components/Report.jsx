@@ -40,11 +40,13 @@ export default function Report({ report, id }) {
         {["all", "critical", "high", "medium", "low"].map((level) => (
           <button
             key={level}
-            className={filter === level ? "selected" : ""}
+            type="button"
+            className={`severity-tile severity-tile-${level} ${filter === level ? "selected" : ""}`}
+            aria-pressed={filter === level}
             onClick={() => setFilter(level)}
           >
-            {level}{" "}
-            <span>
+            <span className="severity-tile-label">{level}</span>
+            <span className="severity-tile-count">
               {level === "all"
                 ? report.findings.length
                 : report.findings.filter((f) => f.severity === level).length}
