@@ -70,13 +70,13 @@ export default function Report({ report, id }) {
                     {f.file}:{f.line}
                   </small>
                 </span>
+                <span className="category">{f.category}</span>
                 <ChevronDown size={16} />
               </summary>
               <div className="finding-body">
                 <p>{f.explanation}</p>
                 <h4>Suggested next step</h4>
                 <p>{f.recommendation}</p>
-                <span className="category">{f.category}</span>
               </div>
             </details>
           ))

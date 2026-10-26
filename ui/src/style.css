@@ -928,11 +928,14 @@ h1 > span {
 }
 .category {
   display: inline-block;
+  flex-shrink: 0;
   font-size: 9px;
+  color: #7b879c;
+  line-height: 1.8;
   background: #f3f5f9;
   border-radius: 4px;
   padding: 1px 6px;
-  margin-top: 9px;
+  margin-top: 1px;
 }
 .scope {
   border-top: 1px solid #edf0f6;
