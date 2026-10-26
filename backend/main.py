@@ -34,6 +34,7 @@ class Job:
     task: asyncio.Task | None = None
 
     async def emit(self, kind, **data):
+        """Append an event with a sequential ID so clients can resume replay."""
         self.events.append({'id': len(self.events), 'type': kind, **data})
 
 
@@ -41,6 +42,7 @@ jobs: dict[str, Job] = {}
 
 
 def prune():
+    """Remove finished jobs once their report retention period has elapsed."""
     for key, job in list(jobs.items()):
         if job.finished_at and time.monotonic() - job.finished_at > TTL:
             del jobs[key]
@@ -48,16 +50,21 @@ def prune():
 
 @asynccontextmanager
 async def lifespan(app):
+    """Start periodic cleanup and cancel outstanding tasks on server shutdown."""
     async def cleanup():
+        """Sweep expired jobs every minute while the application is running."""
         while True:
             await asyncio.sleep(60)
             prune()
+
     sweeper = asyncio.create_task(cleanup())
     yield
     sweeper.cancel()
+
     tasks = [j.task for j in jobs.values() if j.task and not j.task.done()]
     for task in tasks:
         task.cancel()
+    
     await asyncio.gather(sweeper, *tasks, return_exceptions=True)
     jobs.clear()
 
@@ -68,51 +75,65 @@ app.add_middleware(CORSMiddleware, allow_origins=ORIGINS, allow_methods=['GET', 
 
 @app.middleware('http')
 async def bound_body(request, call_next):
+    """Bound POST body size before parsing, allowing overhead for multipart fields."""
     # Limit streamed multipart bodies as well as Content-Length before parsing.
     if request.method == 'POST':
         body = bytearray()
+
         async for chunk in request.stream():
             body.extend(chunk)
             if len(body) > MAX_UPLOAD + 64 * 1024:
                 return Response('Request exceeds 20 MB upload limit.', status_code=413)
         sent = False
+        
         async def receive():
+            """Replay the buffered request body once for downstream consumers."""
             nonlocal sent
             if sent:
                 return {'type': 'http.request', 'body': b'', 'more_body': False}
             sent = True
             return {'type': 'http.request', 'body': bytes(body), 'more_body': False}
+        
         request._receive = receive
         request._body = bytes(body)
+    
     return await call_next(request)
 
 
 @app.get('/api/health')
 async def health():
+    """Report API availability, key presence, and the configured review model."""
     return {'status': 'ok', 'configured': bool(os.getenv('OPENAI_API_KEY')), 'model': os.getenv('REVIEW_MODEL', 'gpt-4.1-mini')}
 
 
 async def process(job: Job, data: bytes | None, url: str, focus: str):
+    """Prepare source, run the review, and record its report or failure events."""
     job.status = 'running'
+
     try:
         if data is None:
             await job.emit('progress', agent='source', status='running', message='Downloading the public repository from GitHub…')
             data, job.source = await fetch_github(url)
+
         await job.emit('progress', agent='source', status='running', message='Reading source files and preparing the review…')
         files, scope = await asyncio.to_thread(read_archive, data)
         data = None
+        
         await job.emit('progress', agent='source', status='complete', message=f"Prepared {len(files)} files. {len(scope['skipped'])} files excluded.", scope=scope)
         report = await run_review(files, focus, job.emit)
         job.report = {**report, 'source': job.source, 'scope': scope, 'notice': 'AI-assisted static review; code and tests were not executed. Validate findings before applying changes.'}
         job.status = 'complete'
+        
         await job.emit('complete', report=job.report)
     except ValueError as exc:
         job.status = 'error'
         await job.emit('error', message=str(exc))
+
     except Exception:
         logger.exception('Review failed')
         job.status = 'error'
         await job.emit('error', message='Review could not finish. Check the server logs, API key, model access, and quota, then try again.')
+
     finally:
         job.finished_at = time.monotonic()
 
@@ -123,15 +144,19 @@ async def create_review(
     repo_url: Annotated[str, Form(max_length=500)] = '',
     focus: Annotated[str, Form(max_length=2000)] = '',
 ):
+    """Validate one source, reserve queue capacity, and start a background review."""
     if bool(file) == bool(repo_url.strip()):
         raise HTTPException(400, 'Provide exactly one ZIP file or GitHub repository URL.')
+    
     if repo_url:
         try:
             github_slug(repo_url)
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
+        
     if not os.getenv('OPENAI_API_KEY'):
         raise HTTPException(503, 'Add OPENAI_API_KEY to the server .env file and restart the backend.')
+    
     prune()
     data = None
     if file:
@@ -143,35 +168,44 @@ async def create_review(
                 raise HTTPException(413, 'ZIP exceeds the 20 MB limit.')
         finally:
             await file.close()
+
     # Reserve capacity without awaiting between the check and insertion.
     if sum(j.status in {'queued', 'running'} for j in jobs.values()) >= 3 or len(jobs) >= 100:
         raise HTTPException(429, 'The review queue is full. Please try again shortly.')
+    
     key = uuid.uuid4().hex
     job = Job(source=(file.filename or 'upload.zip') if file else repo_url.strip())
     jobs[key] = job
+    
     await job.emit('progress', agent='source', status='queued', message='Review queued. Bringing your specialist team together…')
     job.task = asyncio.create_task(process(job, data, repo_url.strip(), focus))
+    
     return {'id': key}
 
 
 def get_job(key):
+    """Look up a retained job, returning HTTP 404 if it is missing or expired."""
     prune()
     if key not in jobs:
         raise HTTPException(404, 'Review not found or expired. Reports are retained for one hour after completion.')
+    
     return jobs[key]
 
 
 @app.get('/api/reviews/{key}')
 async def status(key: str):
+    """Return job state and event history for polling and connection recovery."""
     job = get_job(key)
     return {'status': job.status, 'events': job.events, 'report': job.report}
 
 
 @app.get('/api/reviews/{key}/report')
 async def download(key: str, format: str = 'markdown'):
+    """Download a ready report as JSON, Word, or Markdown; reject other formats."""
     job = get_job(key)
     if not job.report:
         raise HTTPException(409, 'The report is not ready yet.')
+    
     report = job.report
     if format == 'json':
         return Response(json.dumps(report, indent=2), media_type='application/json', headers={'Content-Disposition': 'attachment; filename="review.json"'})
@@ -179,29 +213,37 @@ async def download(key: str, format: str = 'markdown'):
         return Response(word_report(report), media_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document', headers={'Content-Disposition': 'attachment; filename="review.docx"'})
     if format != 'markdown':
         raise HTTPException(400, 'Format must be docx, markdown or json.')
+    
     lines = ['# Code review', '', f"Source: {report['source']}", '', report['summary'], '', report['notice'], '', f"Reviewed {report['scope']['files_reviewed']} files; excluded {len(report['scope']['skipped'])}."]
     if report['incomplete']:
         lines += ['', '**Partial review: at least one specialist failed.**']
+    
     for f in report['findings']:
         lines += ['', f"## [{f['severity'].upper()}] {f['title']}", f"{f['category']} · `{f['file']}:{f['line']}`", '', f['explanation'], '', f"Suggested fix: {f['recommendation']}"]
     lines += ['', '## Specialist summaries']
+    
     for agent in report['agents']:
         lines += ['', f"### {agent['agent']}", agent['summary']]
+    
     if report['scope']['skipped']:
         lines += ['', '## Excluded files']
         lines += [f"- `{f['path']}`: {f['reason']}" for f in report['scope']['skipped']]
+    
     return Response('\n'.join(lines), media_type='text/markdown', headers={'Content-Disposition': 'attachment; filename="review.md"'})
 
 
 @app.websocket('/ws/reviews/{key}')
 async def events(socket: WebSocket, key: str, after: int = -1):
+    """Replay events after the client's last ID, then stream updates until done."""
     if socket.headers.get('origin') not in ORIGINS:
         await socket.close(code=1008)
         return
+    
     prune()
     if key not in jobs:
         await socket.close(code=1008)
         return
+    
     await socket.accept()
     job = jobs[key]
     cursor = max(0, min(after + 1, len(job.events)))
@@ -217,6 +259,7 @@ async def events(socket: WebSocket, key: str, after: int = -1):
             await asyncio.sleep(.25)
             ticks += 1
             if ticks % 60 == 0:
+                # Keep idle connections alive during long specialist reviews.
                 await socket.send_json({'type': 'heartbeat'})
     except (WebSocketDisconnect, RuntimeError, OSError):
         pass
