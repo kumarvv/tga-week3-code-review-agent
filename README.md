@@ -2,6 +2,14 @@
 
 A chat-style code reviewer built with **React, Tailwind CSS, Vite, FastAPI, LangChain, and LangGraph**. Upload a ZIP or enter a public GitHub repository URL. Three specialist agents review bugs/anti-patterns, security, and missing tests in parallel; an orchestrator merges and prioritizes their findings.
 
+## Architecture
+
+![Alt text](/docs/architecture.jpg?raw=true "Architecture")
+
+## Screenshot
+
+![Alt text](/docs/screenshot.jpg?raw=true "Screenshot")
+
 ## Run locally
 
 You need Python 3.11+, [uv](https://docs.astral.sh/uv/), Node.js 20.19+ (or 22.12+), and an OpenAI API key with access to the configured model.
